@@ -106,6 +106,8 @@ p.d{color:var(--muted)}
 .rev{border-radius:24px;padding:26px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:16px}
 .rev.ph{border-style:dashed;background:transparent;color:var(--muted)}
 .rev .who{font-weight:600;color:var(--ink)}
+.rev .stars{color:#e6a700;letter-spacing:.12em;font-size:1.15rem}
+.reviews-note{color:var(--muted);font-size:.9rem;margin-top:-22px;margin-bottom:24px}
 /* contact */
 .contact{background:var(--accent);color:var(--accent-ink);border-radius:36px;padding:56px 28px;margin:0 0 20px}
 @media(min-width:800px){.contact{padding:72px 56px}}
@@ -199,6 +201,7 @@ footer{padding:28px 0 44px;color:var(--muted);font-size:.9rem;text-align:center}
     <h2>Najlepsza reklama? Polecenia moich uczniów.</h2>
     <p class="lead">Bardzo cieszy mnie, że kolejni uczniowie trafiają do mnie dzięki rekomendacjom.</p>
   </div>
+  <p class="reviews-note"></p>
   <div class="reviews" id="reviews"></div>
 </div></section>
 
@@ -215,20 +218,29 @@ footer{padding:28px 0 44px;color:var(--muted);font-size:.9rem;text-align:center}
       <select name="topic" id="topic"><option>Kurs maturalny</option><option>Lekcje indywidualne</option></select></label>
     <label>Wiadomość<textarea name="msg" placeholder="Na jakim etapie jesteś? Z czym masz największy problem?"></textarea></label>
     <button class="btn" type="submit">Wyślij zapytanie →</button>
-    <p class="hint">Kliknięcie otworzy Twój program pocztowy z przygotowaną wiadomością.</p>
+    <p class="hint" id="formStatus" role="status" aria-live="polite">Wiadomość zostanie wysłana bezpośrednio przez formularz.</p>
   </form>
 </div></div></section>
 </main>
 
 <footer><div class="wrap">© <span id="yr"></span> <span data-name>Chemia z Julią</span> · Korepetycje z chemii online</div></footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
 /* ===== KONFIGURACJA — edytuj tylko tutaj ===== */
 const CONFIG = {
-  email: "TUTAJ_WSTAW_MOJ_EMAIL",   // <-- Twój adres e-mail
+  email: "chemiazjulka@gmail.com",
+  emailjs: {
+    serviceId: "service_ofufifp",
+    templateId: "template_cjecp2d",
+    publicKey: "on1OZ3Rh130V_e66h"
+  },
   name: "Julią",                    // <-- imię w narzędniku: „Chemia z Julią”
   photoUrl: "",                     // <-- adres zdjęcia, np. "foto.jpg"
-  testimonials: [                   // <-- dodaj opinie: { text: "...", author: "..." }
+  testimonials: [                   // <-- zastąp przykłady prawdziwymi opiniami uczniów
+    { text:"Dzięki regularnym zajęciom i jasnemu planowi nauki dużo lepiej rozumiem chemię i czuję się pewniej przed maturą.", author:"Kasia M. - Maturzystka, chemia rozszerzona" },
+    { text:"Zadania maturalne przestały być takie straszne. Wszystko jest tłumaczone spokojnie i krok po kroku.", author:"Julia K. - uczennica klasy maturalnej" },
+    { text:"Świetne przygotowanie do matury — uporządkowałam materiał i wiem, jak podejść do różnych typów zadań.", author:"Michał P. - przygotowanie do matury rozszerzonej" }
   ]
 };
 const OFFERS = [
@@ -248,7 +260,16 @@ const check = '<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></
 const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 function mail(subject, body){
-  location.href = "mailto:" + CONFIG.email + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body || "");
+  const params = new URLSearchParams({
+    view: "cm",
+    fs: "1",
+    to: CONFIG.email,
+    su: subject,
+    body: body || ""
+  });
+  const composeWindow = window.open("https://mail.google.com/mail/?" + params, "_blank");
+  if (composeWindow) composeWindow.opener = null;
+  else location.href = "https://mail.google.com/mail/?" + params;
 }
 
 document.querySelectorAll("[data-name]").forEach(e => e.textContent = "Chemia z " + CONFIG.name);
@@ -274,15 +295,42 @@ $("#mailBtn").addEventListener("click", e => {
   mail("Zapytanie o korepetycje z chemii", "Cześć!\n\nChciał(a)bym zapytać o wolne miejsca na przygotowanie do matury 2027.\n\nPozdrawiam");
 });
 
-$("#form").addEventListener("submit", e => {
+$("#form").addEventListener("submit", async e => {
   e.preventDefault();
-  const f = new FormData(e.target);
-  mail("Zapytanie: " + f.get("topic"),
-    "Imię: " + f.get("name") + "\nE-mail: " + f.get("email") + "\nTemat: " + f.get("topic") + "\n\n" + f.get("msg"));
+  const form = e.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const status = $("#formStatus");
+  if (!window.emailjs) {
+    status.textContent = "Nie udało się załadować usługi wysyłania. Odśwież stronę i spróbuj ponownie.";
+    return;
+  }
+
+  const f = new FormData(form);
+  submitButton.disabled = true;
+  status.textContent = "Wysyłanie wiadomości…";
+  const name = f.get("name");
+  try {
+    await window.emailjs.send(CONFIG.emailjs.serviceId, CONFIG.emailjs.templateId, {
+      name,
+      email: f.get("email"),
+      interest: f.get("topic"),
+      reply_to: f.get("email"),
+      message: f.get("msg")
+    }, { publicKey: CONFIG.emailjs.publicKey });
+    form.reset();
+    status.textContent = "Dziękuję! Wiadomość została wysłana.";
+  } catch (error) {
+    console.error("EmailJS send failed:", error);
+    const details = error && typeof error.text === "string" ? error.text : "";
+    const code = error && error.status ? ` (${error.status})` : "";
+    status.textContent = `Nie udało się wysłać wiadomości${code}.${details ? ` ${details}` : " Sprawdź ustawienia EmailJS i spróbuj ponownie."}`;
+  } finally {
+    submitButton.disabled = false;
+  }
 });
 
 $("#reviews").innerHTML = (CONFIG.testimonials.length ? CONFIG.testimonials : [1,2,3].map(() => null)).map(t => t
-  ? `<figure class="rev rv" style="margin:0"><p>„${esc(t.text)}”</p><span class="who">${esc(t.author)}</span></figure>`
+  ? `<figure class="rev rv" style="margin:0"><div class="stars" role="img" aria-label="5 na 5 gwiazdek">★★★★★</div><p>„${esc(t.text)}”</p><span class="who">${esc(t.author)}</span></figure>`
   : `<div class="rev ph rv"><p>Tu pojawi się opinia ucznia.</p><span class="who">Imię, klasa</span></div>`).join("");
 
 if (!CONFIG.testimonials.length) $("#reviews").closest("section").hidden = true;
